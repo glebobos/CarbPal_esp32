@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 Captive Portal</title>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <div class="glass-bg"></div>
+  <main class="container">
+    <header class="header">
+      <div class="logo-area">
+        <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+          <polyline points="2 17 12 22 22 17"></polyline>
+          <polyline points="2 12 12 17 22 12"></polyline>
+        </svg>
+        <h1>CarbPal</h1>
+      </div>
+      <div class="status-badge" id="status-badge">
+        <span class="status-dot"></span>
+        <span class="status-text" id="status-text">Connecting...</span>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Device Dashboard</h2>
+        <p class="subtitle">Real-time device status and telemetry</p>
+      </div>
+
+      <div class="grid">
+        <div class="grid-item">
+          <span class="label">WiFi SSID</span>
+          <span class="value" id="val-ssid">--</span>
+        </div>
+        <div class="grid-item">
+          <span class="label">Portal IP</span>
+          <span class="value" id="val-ip">--</span>
+        </div>
+        <div class="grid-item">
+          <span class="label">Active Clients</span>
+          <span class="value" id="val-clients">--</span>
+        </div>
+        <div class="grid-item">
+          <span class="label">Free Heap</span>
+          <span class="value" id="val-heap">--</span>
+        </div>
+        <div class="grid-item">
+          <span class="label">System Uptime</span>
+          <span class="value" id="val-uptime">--</span>
+        </div>
+        <div class="grid-item">
+          <span class="label">Chipset</span>
+          <span class="value" id="val-chip">--</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="footer-info">
+        <div>
+          <span class="label">OS Version</span>
+          <span class="value small" id="val-idf">--</span>
+        </div>
+        <button class="btn-refresh" id="btn-refresh" aria-label="Refresh telemetry data">
+          <svg class="icon-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+          </svg>
+          Refresh
+        </button>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

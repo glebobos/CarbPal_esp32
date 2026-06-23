@@ -1,0 +1,19 @@
+# ESP-IDF files
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+
+# SPIFFS image compiled assets (keep placeholder .gitkeep)
+firmware/spiffs_image/*
+!firmware/spiffs_image/.gitkeep
+
+# Frontend build files
+frontend/node_modules/
+frontend/dist/
+frontend/package-lock.json
+
+# Local IDEs & Operating Systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,18 @@
+services:
+  frontend-builder:
+    image: esp32-portal-frontend
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    volumes:
+      - ./firmware/spiffs_image:/app/dist
+
+  firmware-builder:
+    image: esp32-portal-idf
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.idf
+    volumes:
+      - ./firmware:/project
+    working_dir: /project
+    command: idf.py build

@@ -1,0 +1,15 @@
+menu "Captive Portal Configuration"
+
+config PORTAL_SSID
+    string "WiFi AP SSID"
+    default "ESP32-Portal"
+    help
+        SSID of the SoftAP captive portal network.
+
+config PORTAL_PASSWORD
+    string "WiFi AP Password"
+    default "12345678"
+    help
+        WPA2 password (minimum 8 characters).
+
+endmenu
