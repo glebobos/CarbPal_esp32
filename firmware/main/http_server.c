@@ -83,7 +83,28 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath) {
 
 /* HTTP GET Handlers */
 
+static bool is_custom_host(httpd_req_t *req) {
+    char host[64];
+    if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) == ESP_OK) {
+        if (strstr(host, "corburator9999.by") != NULL) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static esp_err_t captive_redirect_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "GET %s - redirecting to portal home (corburator9999.by)", req->uri);
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", "http://corburator9999.by/");
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+}
+
 static esp_err_t root_get_handler(httpd_req_t *req) {
+    if (!is_custom_host(req)) {
+        return captive_redirect_handler(req);
+    }
     ESP_LOGI(TAG, "GET / - serving portal index.html");
     esp_err_t ret = serve_file(req, "/spiffs/index.html");
     return ret;
@@ -107,14 +128,6 @@ static esp_err_t success_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "GET /success.txt - returning success");
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_sendstr(req, "success");
-    return ESP_OK;
-}
-
-static esp_err_t captive_redirect_handler(httpd_req_t *req) {
-    ESP_LOGI(TAG, "GET %s - redirecting to portal home", req->uri);
-    httpd_resp_set_status(req, "302 Found");
-    httpd_resp_set_hdr(req, "Location", "http://192.168.4.1/");
-    httpd_resp_send(req, NULL, 0);
     return ESP_OK;
 }
 
