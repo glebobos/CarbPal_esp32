@@ -66,6 +66,17 @@ static int parse_dns_name(const uint8_t *buffer, int offset, int max_len, char *
     return curr; // Returns offset after the name
 }
 
+static const char* allowed_dns_domains[] = {
+    "carb.by",
+    "www.carb.by",
+    "connectivitycheck.gstatic.com",
+    "connectivitycheck.android.com",
+    "clients3.google.com",
+    "captive.apple.com",
+    "www.msftconnecttest.com",
+    "www.msftncsi.com"
+};
+
 static void dns_server_task(void *pvParameters) {
     uint8_t rx_buffer[512];
     struct sockaddr_storage source_addr;
@@ -127,7 +138,15 @@ static void dns_server_task(void *pvParameters) {
             continue;
         }
         
-        if (strcasecmp(domain_name, "carb.by") != 0 && strcasecmp(domain_name, "www.carb.by") != 0) {
+        bool should_resolve = false;
+        for (size_t i = 0; i < sizeof(allowed_dns_domains) / sizeof(allowed_dns_domains[0]); i++) {
+            if (strcasecmp(domain_name, allowed_dns_domains[i]) == 0) {
+                should_resolve = true;
+                break;
+            }
+        }
+        
+        if (!should_resolve) {
             continue;
         }
         

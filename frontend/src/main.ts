@@ -21,6 +21,8 @@ let rawValues: CarbData = { v1: 0.0, v2: 0.0, v3: 0.0, v4: 0.0 };
 let calValues: CarbData = { v1: 0.0, v2: 0.0, v3: 0.0, v4: 0.0 };
 
 // Oscilloscope History buffers (up to 200 samples)
+let dirty = true;
+let historyIndex = 0;
 const BUFFER_SIZE = 200;
 const historyCh1: number[] = Array(BUFFER_SIZE).fill(0); // Diff 1-2
 const historyCh2: number[] = Array(BUFFER_SIZE).fill(0); // Diff 3-4
@@ -334,27 +336,71 @@ function updateEngineHighlights() {
   }
 }
 
-// Fetch Telemetry from ESP32
-async function fetchTelemetry() {
-  try {
-    const res = await fetch('/api/data');
-    if (!res.ok) throw new Error('API Offline');
-    const data: CarbData = await res.json();
-    
-    rawValues = data;
+let ws: WebSocket | null = null;
+let reconnectTimer: any = null;
+
+function connectWebSocket() {
+  if (ws) {
+    try {
+      ws.close();
+    } catch (e) {}
+  }
+  
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsHost = window.location.host;
+  const wsUrl = `${wsProtocol}//${wsHost}/ws`;
+  
+  console.log(`Connecting to WebSocket: ${wsUrl}`);
+  ws = new WebSocket(wsUrl);
+  
+  ws.onopen = () => {
+    console.log('WebSocket connected');
     isConnected = true;
-    
     if (elements.statusBadge && elements.statusText) {
       elements.statusBadge.className = 'status-badge connected';
       elements.statusText.textContent = 'Подключено';
     }
-  } catch (e) {
-    isConnected = false;
-    rawValues = { v1: 0, v2: 0, v3: 0, v4: 0 };
-    if (elements.statusBadge && elements.statusText) {
-      elements.statusBadge.className = 'status-badge disconnected';
-      elements.statusText.textContent = 'Отсутствует подключение';
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
     }
+  };
+  
+  ws.onmessage = (event) => {
+    try {
+      const data: CarbData = JSON.parse(event.data);
+      rawValues = data;
+      updateHistoryAndTelemetry();
+    } catch (e) {
+      console.error('Error parsing WebSocket message:', e);
+    }
+  };
+  
+  ws.onclose = () => {
+    console.log('WebSocket connection closed, reconnecting in 2s...');
+    handleDisconnect();
+  };
+  
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error);
+    ws?.close();
+  };
+}
+
+function handleDisconnect() {
+  isConnected = false;
+  rawValues = { v1: 0, v2: 0, v3: 0, v4: 0 };
+  if (elements.statusBadge && elements.statusText) {
+    elements.statusBadge.className = 'status-badge disconnected';
+    elements.statusText.textContent = 'Отсутствует подключение';
+  }
+  updateHistoryAndTelemetry();
+  
+  if (!reconnectTimer) {
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connectWebSocket();
+    }, 2000);
   }
 }
 
@@ -380,12 +426,11 @@ function updateHistoryAndTelemetry() {
   const ch2Diff = calValues.v2;
   const ch3Diff = calValues.v3;
 
-  historyCh1.push(ch1Diff);
-  historyCh1.shift();
-  historyCh2.push(ch2Diff);
-  historyCh2.shift();
-  historyCh3.push(ch3Diff);
-  historyCh3.shift();
+  historyCh1[historyIndex] = ch1Diff;
+  historyCh2[historyIndex] = ch2Diff;
+  historyCh3[historyIndex] = ch3Diff;
+  historyIndex = (historyIndex + 1) % BUFFER_SIZE;
+  dirty = true;
 
   // Update text elements on UI
   const updateValueEl = (valEl: HTMLElement | null, fillEl: HTMLElement | null, needleEl: HTMLElement | null, val: number) => {
@@ -491,7 +536,8 @@ function drawWaveform(
   
   const len = history.length;
   for (let i = 0; i < len; i++) {
-    const val = history[i];
+    const idx = (historyIndex + i) % len;
+    const val = history[idx];
     // Map value: center is w/2. Range is from -yRange to +yRange on X axis.
     const x = w / 2 + (val / yRange) * (w / 2);
     // Map time: newest value (i = len - 1) at y = 0, oldest (i = 0) at y = h.
@@ -516,20 +562,15 @@ function drawWaveform(
 
 // 60FPS Render Loop
 function renderLoop() {
-  if (currentView === '3-lines') {
+  if (currentView === '3-lines' && dirty) {
     drawWaveform(ctxCh1, elements.canvasCh1, historyCh1, '', 20, '#39ff14');
     drawWaveform(ctxCh2, elements.canvasCh2, historyCh2, '', 20, '#39ff14');
     drawWaveform(ctxCh3, elements.canvasCh3, historyCh3, '', 20, '#39ff14');
+    dirty = false;
   }
 
   requestAnimationFrame(renderLoop);
 }
-
-// Setup background poller & local simulation update speed
-setInterval(async () => {
-  await fetchTelemetry();
-  updateHistoryAndTelemetry();
-}, 100); // 10Hz updates matching professional scopes
 
 // Startup initialization
 document.addEventListener('DOMContentLoaded', () => {
@@ -539,4 +580,5 @@ document.addEventListener('DOMContentLoaded', () => {
   updateEngineHighlights();
   initCanvases();
   renderLoop();
+  connectWebSocket();
 });

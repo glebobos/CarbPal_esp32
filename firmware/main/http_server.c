@@ -16,6 +16,10 @@
 
 static const char *TAG = "http_server";
 
+static httpd_handle_t s_server = NULL;
+static TaskHandle_t s_telemetry_task_handle = NULL;
+static volatile bool s_telemetry_run = false;
+
 static const char* get_content_type(const char *path) {
     if (strstr(path, ".html")) return "text/html";
     if (strstr(path, ".css")) return "text/css";
@@ -30,7 +34,11 @@ static const char* get_content_type(const char *path) {
 
 static esp_err_t serve_file(httpd_req_t *req, const char *filepath) {
     char gz_filepath[128];
-    snprintf(gz_filepath, sizeof(gz_filepath), "%s.gz", filepath);
+    int written = snprintf(gz_filepath, sizeof(gz_filepath), "%s.gz", filepath);
+    if (written >= sizeof(gz_filepath)) {
+        ESP_LOGE(TAG, "File path truncated: %s", filepath);
+        return ESP_FAIL;
+    }
     
     struct stat st;
     bool is_gz = false;
@@ -45,7 +53,7 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath) {
         return ESP_FAIL;
     }
     
-    FILE *fd = fopen(final_path, "r");
+    FILE *fd = fopen(final_path, "rb");
     if (!fd) {
         ESP_LOGE(TAG, "Failed to open file: %s", final_path);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to read file");
@@ -119,7 +127,7 @@ static esp_err_t root_get_handler(httpd_req_t *req) {
 static esp_err_t api_info_get_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "GET /api/info - serving telemetry");
     
-    char json_response[256];
+    char json_response[512];
     snprintf(json_response, sizeof(json_response),
              "{\"ssid\":\"%s\",\"ip\":\"192.168.4.1\",\"clients\":%d,\"heap_free\":%lu,\"uptime_s\":%lld,\"idf_version\":\"%s\",\"chip\":\"%s\"}",
              CONFIG_PORTAL_SSID,
@@ -128,42 +136,118 @@ static esp_err_t api_info_get_handler(httpd_req_t *req) {
              (long long)(esp_timer_get_time() / 1000000),
              esp_get_idf_version(),
              "ESP32-C3");
-             
+              
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_sendstr(req, json_response);
     return ESP_OK;
 }
 
 static float s_diff_values[3] = {0.0f, 0.0f, 0.0f};
 
-static esp_err_t api_data_get_handler(httpd_req_t *req) {
-    for (int i = 0; i < 3; i++) {
-        // Generate random fluctuation between -0.4 and +0.4
-        float dev = (((float)(esp_random() % 1000) / 1000.0f) - 0.5f) * 0.8f;
-        s_diff_values[i] += dev;
-        // Keep them bounded in typical ranges (-30 to +30 kPa)
-        if (s_diff_values[i] < -30.0f) s_diff_values[i] = -30.0f;
-        if (s_diff_values[i] > 30.0f) s_diff_values[i] = 30.0f;
+
+static void telemetry_websocket_task(void *pvParameters) {
+    ESP_LOGI(TAG, "Telemetry WebSocket task started");
+    while (s_telemetry_run) {
+        vTaskDelay(pdMS_TO_TICKS(100)); // 100ms interval (10Hz)
+        
+        if (s_server == NULL) {
+            continue;
+        }
+        
+        // Count active WebSocket clients first
+        size_t clients = 7;
+        int client_fds[7];
+        size_t ws_clients_count = 0;
+        if (httpd_get_client_list(s_server, &clients, client_fds) == ESP_OK) {
+            for (size_t i = 0; i < clients; i++) {
+                if (httpd_ws_get_fd_info(s_server, client_fds[i]) == HTTPD_WS_CLIENT_WEBSOCKET) {
+                    ws_clients_count++;
+                }
+            }
+        }
+        
+        // Skip JSON generation entirely if no active WS clients
+        if (ws_clients_count == 0) {
+            continue;
+        }
+        
+        // Generate random fluctuation between -0.4 and +0.4 for mock telemetry
+        for (int i = 0; i < 3; i++) {
+            float dev = (((float)(esp_random() % 1000) / 1000.0f) - 0.5f) * 0.8f;
+            s_diff_values[i] += dev;
+            if (s_diff_values[i] < -30.0f) s_diff_values[i] = -30.0f;
+            if (s_diff_values[i] > 30.0f) s_diff_values[i] = 30.0f;
+        }
+        
+        char json_response[128];
+        snprintf(json_response, sizeof(json_response),
+                 "{\"v1\":%.2f,\"v2\":%.2f,\"v3\":%.2f,\"v4\":0.00}",
+                 s_diff_values[0], s_diff_values[1], s_diff_values[2]);
+                 
+        // Broadcast
+        if (httpd_get_client_list(s_server, &clients, client_fds) == ESP_OK) {
+            for (size_t i = 0; i < clients; i++) {
+                if (httpd_ws_get_fd_info(s_server, client_fds[i]) == HTTPD_WS_CLIENT_WEBSOCKET) {
+                    httpd_ws_frame_t ws_pkt;
+                    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+                    ws_pkt.payload = (uint8_t *)json_response;
+                    ws_pkt.len = strlen(json_response);
+                    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+                    
+                    esp_err_t err = httpd_ws_send_frame_async(s_server, client_fds[i], &ws_pkt);
+                    if (err != ESP_OK) {
+                        ESP_LOGD(TAG, "Failed to send WS frame asynchronously: %s", esp_err_to_name(err));
+                    }
+                }
+            }
+        }
     }
-    
-    char json_response[128];
-    snprintf(json_response, sizeof(json_response),
-             "{\"v1\":%.2f,\"v2\":%.2f,\"v3\":%.2f,\"v4\":0.00}",
-             s_diff_values[0], s_diff_values[1], s_diff_values[2]);
-             
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_sendstr(req, json_response);
-    return ESP_OK;
+    ESP_LOGI(TAG, "Telemetry WebSocket task exiting");
+    s_telemetry_task_handle = NULL;
+    vTaskDelete(NULL);
 }
 
+static esp_err_t ws_handler(httpd_req_t *req) {
+    if (req->method == HTTP_GET) {
+        ESP_LOGI(TAG, "WebSocket handshake done, new connection opened");
+        return ESP_OK;
+    }
+    
+    httpd_ws_frame_t ws_pkt;
+    uint8_t *buf = NULL;
+    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+    
+    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    
+    if (ws_pkt.len > 0) {
+        buf = calloc(1, ws_pkt.len + 1);
+        if (buf) {
+            ws_pkt.payload = buf;
+            ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
+            if (ret == ESP_OK) {
+                ESP_LOGI(TAG, "Received WS packet: %s", (char *)ws_pkt.payload);
+            }
+            free(buf);
+        }
+    }
+    return ESP_OK;
+}
 
 static esp_err_t catch_all_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "Catch-all handler matched: %s", req->uri);
     
-    // Serve Vite static assets
-    if (strncmp(req->uri, "/assets/", 8) == 0) {
+    // Return 404 for favicon to avoid redirect loops
+    if (strcmp(req->uri, "/favicon.ico") == 0) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Not Found");
+        return ESP_OK;
+    }
+    
+    // Serve Vite static assets and favicon.svg
+    if (strncmp(req->uri, "/assets/", 8) == 0 || strcmp(req->uri, "/favicon.svg") == 0) {
         char filepath[128];
         const char *quest = strchr(req->uri, '?');
         size_t path_len = quest ? (quest - req->uri) : strlen(req->uri);
@@ -230,14 +314,17 @@ static const httpd_uri_t api_info_uri = {
     .user_ctx  = NULL
 };
 
-static const httpd_uri_t api_data_uri = {
-    .uri       = "/api/data",
-    .method    = HTTP_GET,
-    .handler   = api_data_get_handler,
-    .user_ctx  = NULL
-};
+// Redundant data endpoint configuration removed
 
 // Redundant/unused URI configurations removed
+
+static const httpd_uri_t ws_uri = {
+    .uri        = "/ws",
+    .method     = HTTP_GET,
+    .handler    = ws_handler,
+    .user_ctx   = NULL,
+    .is_websocket = true
+};
 
 static const httpd_uri_t catch_all_uri = {
     .uri       = "/*",
@@ -261,13 +348,25 @@ httpd_handle_t start_webserver(void) {
     config.stack_size        = 8192;
     config.uri_match_fn      = httpd_uri_match_wildcard;
     
+    // Enable TCP Keep-Alive
+    config.keep_alive_enable  = true;
+    config.keep_alive_idle    = 5;
+    config.keep_alive_interval= 5;
+    config.keep_alive_count   = 3;
+    
     ESP_LOGI(TAG, "Starting HTTP Daemon on port %d...", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK) {
+        s_server = server;
         ESP_LOGI(TAG, "Registering HTTP routing table...");
         httpd_register_uri_handler(server, &root_uri);
         httpd_register_uri_handler(server, &api_info_uri);
-        httpd_register_uri_handler(server, &api_data_uri);
+        httpd_register_uri_handler(server, &ws_uri);
         httpd_register_uri_handler(server, &catch_all_uri);
+        
+        s_telemetry_run = true;
+        // Spawn WebSocket telemetry background task
+        xTaskCreate(telemetry_websocket_task, "telemetry_ws", 4096, NULL, 5, &s_telemetry_task_handle);
+        
         return server;
     }
     
@@ -276,6 +375,14 @@ httpd_handle_t start_webserver(void) {
 }
 
 void stop_webserver(httpd_handle_t server) {
+    if (s_telemetry_task_handle) {
+        s_telemetry_run = false;
+        while (s_telemetry_task_handle != NULL) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+    }
+    s_server = NULL;
+    
     if (server) {
         httpd_stop(server);
         ESP_LOGI(TAG, "HTTP Server stopped.");
