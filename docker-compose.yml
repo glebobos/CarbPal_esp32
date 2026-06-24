@@ -1,6 +1,7 @@
 services:
   frontend-builder:
     image: esp32-portal-frontend
+    network_mode: host
     build:
       context: ./frontend
       dockerfile: ../docker/Dockerfile.frontend
@@ -9,6 +10,7 @@ services:
 
   firmware-builder:
     image: esp32-portal-idf
+    network_mode: host
     build:
       context: .
       dockerfile: ./docker/Dockerfile.idf

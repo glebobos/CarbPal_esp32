@@ -237,13 +237,7 @@ body {
   border-radius: 1px;
 }
 
-.mode-icon.lines-4 span {
-  display: block;
-  height: 1.5px;
-  width: 100%;
-  background: currentColor;
-  border-radius: 1px;
-}
+
 
 .tab-label {
   font-size: 0.75rem;
@@ -374,9 +368,7 @@ body {
   align-self: flex-start;
 }
 
-#chart-single-container .chart-wrapper {
-  height: 270px;
-}
+
 
 /* Vacuum Gauges Dials Section */
 .gauges-section {

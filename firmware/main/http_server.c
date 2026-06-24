@@ -58,9 +58,12 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath) {
         httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
     }
     
-    // Add aggressive cache controls for static assets
+    // Add cache controls
     if (strstr(filepath, "/assets/")) {
-        httpd_resp_set_hdr(req, "Cache-Control", "max-age=31536000");
+        httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=31536000, immutable");
+    } else if (strstr(filepath, "index.html")) {
+        httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        httpd_resp_set_hdr(req, "Pragma", "no-cache");
     }
     
     char chunk[1024];
@@ -87,7 +90,7 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath) {
 static bool is_custom_host(httpd_req_t *req) {
     char host[64];
     if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) == ESP_OK) {
-        if (strstr(host, "corburator9999.by") != NULL) {
+        if (strstr(host, "carb.by") != NULL) {
             return true;
         }
     }
@@ -95,9 +98,9 @@ static bool is_custom_host(httpd_req_t *req) {
 }
 
 static esp_err_t captive_redirect_handler(httpd_req_t *req) {
-    ESP_LOGI(TAG, "GET %s - redirecting to portal home (corburator9999.by)", req->uri);
+    ESP_LOGI(TAG, "GET %s - redirecting to portal home (carb.by)", req->uri);
     httpd_resp_set_status(req, "302 Found");
-    httpd_resp_set_hdr(req, "Location", "http://corburator9999.by/");
+    httpd_resp_set_hdr(req, "Location", "http://carb.by/");
     httpd_resp_send(req, NULL, 0);
     return ESP_OK;
 }
@@ -111,26 +114,7 @@ static esp_err_t root_get_handler(httpd_req_t *req) {
     return ret;
 }
 
-static esp_err_t generate_204_handler(httpd_req_t *req) {
-    ESP_LOGI(TAG, "GET /generate_204 - returning 204 No Content");
-    httpd_resp_set_status(req, "204 No Content");
-    httpd_resp_send(req, NULL, 0);
-    return ESP_OK;
-}
-
-static esp_err_t ncsi_handler(httpd_req_t *req) {
-    ESP_LOGI(TAG, "GET /ncsi.txt - returning Microsoft NCSI");
-    httpd_resp_set_type(req, "text/plain");
-    httpd_resp_sendstr(req, "Microsoft NCSI");
-    return ESP_OK;
-}
-
-static esp_err_t success_handler(httpd_req_t *req) {
-    ESP_LOGI(TAG, "GET /success.txt - returning success");
-    httpd_resp_set_type(req, "text/plain");
-    httpd_resp_sendstr(req, "success");
-    return ESP_OK;
-}
+// Redundant/unused handlers removed
 
 static esp_err_t api_info_get_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "GET /api/info - serving telemetry");
@@ -253,40 +237,7 @@ static const httpd_uri_t api_data_uri = {
     .user_ctx  = NULL
 };
 
-static const httpd_uri_t generate_204_uri = {
-    .uri       = "/generate_204",
-    .method    = HTTP_GET,
-    .handler   = generate_204_handler,
-    .user_ctx  = NULL
-};
-
-static const httpd_uri_t hotspot_detect_uri = {
-    .uri       = "/hotspot-detect.html",
-    .method    = HTTP_GET,
-    .handler   = captive_redirect_handler,
-    .user_ctx  = NULL
-};
-
-static const httpd_uri_t ncsi_uri = {
-    .uri       = "/ncsi.txt",
-    .method    = HTTP_GET,
-    .handler   = ncsi_handler,
-    .user_ctx  = NULL
-};
-
-static const httpd_uri_t success_uri = {
-    .uri       = "/success.txt",
-    .method    = HTTP_GET,
-    .handler   = success_handler,
-    .user_ctx  = NULL
-};
-
-static const httpd_uri_t canonical_uri = {
-    .uri       = "/canonical.html",
-    .method    = HTTP_GET,
-    .handler   = captive_redirect_handler,
-    .user_ctx  = NULL
-};
+// Redundant/unused URI configurations removed
 
 static const httpd_uri_t catch_all_uri = {
     .uri       = "/*",
@@ -316,11 +267,6 @@ httpd_handle_t start_webserver(void) {
         httpd_register_uri_handler(server, &root_uri);
         httpd_register_uri_handler(server, &api_info_uri);
         httpd_register_uri_handler(server, &api_data_uri);
-        httpd_register_uri_handler(server, &generate_204_uri);
-        httpd_register_uri_handler(server, &hotspot_detect_uri);
-        httpd_register_uri_handler(server, &ncsi_uri);
-        httpd_register_uri_handler(server, &success_uri);
-        httpd_register_uri_handler(server, &canonical_uri);
         httpd_register_uri_handler(server, &catch_all_uri);
         return server;
     }

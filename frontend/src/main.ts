@@ -26,10 +26,7 @@ const historyCh1: number[] = Array(BUFFER_SIZE).fill(0); // Diff 1-2
 const historyCh2: number[] = Array(BUFFER_SIZE).fill(0); // Diff 3-4
 const historyCh3: number[] = Array(BUFFER_SIZE).fill(0); // Diff (1+2)/2 - (3+4)/2
 
-const historyRaw1: number[] = Array(BUFFER_SIZE).fill(50);
-const historyRaw2: number[] = Array(BUFFER_SIZE).fill(50);
-const historyRaw3: number[] = Array(BUFFER_SIZE).fill(50);
-const historyRaw4: number[] = Array(BUFFER_SIZE).fill(50);
+
 
 // Load calibration from localStorage
 const storedOffsets = localStorage.getItem('carb_offsets');
@@ -376,15 +373,7 @@ function updateHistoryAndTelemetry() {
     calValues = { v1: 0, v2: 0, v3: 0, v4: 0 };
   }
 
-  // Push raw values to raw buffers
-  historyRaw1.push(calValues.v1);
-  historyRaw1.shift();
-  historyRaw2.push(calValues.v2);
-  historyRaw2.shift();
-  historyRaw3.push(calValues.v3);
-  historyRaw3.shift();
-  historyRaw4.push(calValues.v4);
-  historyRaw4.shift();
+
 
   // In differential mode, the channels are already the calibrated sensor values
   const ch1Diff = calValues.v1;
@@ -523,95 +512,7 @@ function drawWaveform(
   ctx.fillText(title, 8, 16);
 }
 
-// Plotting raw signals overlay graph
-function drawOverlayWaveform(
-  ctx: CanvasRenderingContext2D | null,
-  canvas: HTMLCanvasElement | null
-) {
-  if (!ctx || !canvas) return;
 
-  const w = canvas.width / window.devicePixelRatio;
-  const h = canvas.height / window.devicePixelRatio;
-
-  ctx.clearRect(0, 0, w, h);
-
-  // Draw grid
-  ctx.strokeStyle = 'rgba(57, 255, 20, 0.03)';
-  ctx.lineWidth = 1;
-  const gridLines = 8;
-  for (let i = 1; i < gridLines; i++) {
-    const y = (h / gridLines) * i;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y);
-    ctx.stroke();
-  }
-
-  const gridCols = 10;
-  for (let i = 1; i < gridCols; i++) {
-    const x = (w / gridCols) * i;
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, h);
-    ctx.stroke();
-  }
-
-  // Draw a baseline reference at 50 kPa
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([5, 5]);
-  ctx.beginPath();
-  ctx.moveTo(0, h / 2);
-  ctx.lineTo(w, h / 2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Plot all 4 raw cylinder channels
-  const plotRawLine = (history: number[], color: string) => {
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 6;
-
-    const len = history.length;
-    for (let i = 0; i < len; i++) {
-      const x = (w / (len - 1)) * i;
-      
-      // Range: 0 kPa to 100 kPa. h corresponds to 0 kPa, 0 corresponds to 100 kPa.
-      const val = history[i];
-      const y = h - (val / 100) * h;
-      
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.stroke();
-  };
-
-  // Cylinder colors
-  plotRawLine(historyRaw1, '#39ff14'); // Classic Phosphor
-  plotRawLine(historyRaw2, '#00ffcc'); // Cyan/Mint
-  plotRawLine(historyRaw3, '#99ff33'); // Lime
-  plotRawLine(historyRaw4, '#00ff66'); // Spring Green
-  
-  ctx.shadowBlur = 0; // reset
-
-  // Draw Legend inside canvas
-  ctx.font = '500 8px Inter, sans-serif';
-  const drawLegend = (text: string, color: string, x: number) => {
-    ctx.fillStyle = color;
-    ctx.fillRect(x, 10, 8, 4);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.fillText(text, x + 12, 14);
-  };
-  drawLegend('C1', '#39ff14', 10);
-  drawLegend('C2', '#00ffcc', 45);
-  drawLegend('C3', '#99ff33', 80);
-  drawLegend('C4', '#00ff66', 115);
-}
 
 // 60FPS Render Loop
 function renderLoop() {

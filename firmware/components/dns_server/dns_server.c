@@ -1,4 +1,5 @@
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -123,6 +124,10 @@ static void dns_server_task(void *pvParameters) {
         int offset = parse_dns_name(rx_buffer, sizeof(dns_header_t), len, domain_name, sizeof(domain_name));
         if (offset < 0 || offset + 4 > len) {
             ESP_LOGW(TAG, "Failed to parse query domain name");
+            continue;
+        }
+        
+        if (strcasecmp(domain_name, "carb.by") != 0 && strcasecmp(domain_name, "www.carb.by") != 0) {
             continue;
         }
         

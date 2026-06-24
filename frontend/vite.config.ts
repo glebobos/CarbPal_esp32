@@ -9,16 +9,17 @@ export default defineConfig({
     assetsDir: 'assets',
     target: 'esnext',
     minify: true,
+    emptyOutDir: true,
     rollupOptions: {
       output: {
-        entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: (assetInfo) => {
           const name = assetInfo.name || '';
-          if (name.endsWith('.woff2') || name.endsWith('.woff') || name.endsWith('.ttf') || name.endsWith('.eot')) {
-            return 'assets/[hash].[ext]';
+          if (name.endsWith('.css')) {
+            return 'assets/[name]-[hash].[ext]';
           }
-          return 'assets/[name].[ext]';
+          return 'assets/[hash].[ext]';
         },
         manualChunks: undefined
       }
