@@ -1,78 +1,311 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESP32 Captive Portal</title>
+  <title>Carb Sync - Carburetor Synchronizer</title>
+  <!-- Google Fonts: Orbitron for tech gauges, Inter for labels -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
   <div class="glass-bg"></div>
   <main class="container">
+    <!-- Header -->
     <header class="header">
-      <div class="logo-area">
-        <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-          <polyline points="2 17 12 22 22 17"></polyline>
-          <polyline points="2 12 12 17 22 12"></polyline>
+      <button class="help-btn" id="help-btn" aria-label="Help">
+        <svg class="icon-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
         </svg>
-        <h1>CarbPal</h1>
+      </button>
+      <div class="title-area">
+        <h1>Carb Sync</h1>
+        <div class="status-badge disconnected" id="status-badge">
+          <span class="status-dot"></span>
+          <span class="status-text" id="status-text">Отсутствует подключение</span>
+        </div>
       </div>
-      <div class="status-badge" id="status-badge">
-        <span class="status-dot"></span>
-        <span class="status-text" id="status-text">Connecting...</span>
-      </div>
+      <button class="cal-btn" id="cal-btn" aria-label="Calibration">
+        <svg class="icon-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <circle cx="12" cy="12" r="3"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+        </svg>
+      </button>
     </header>
 
-    <section class="card">
-      <div class="card-header">
-        <h2>Device Dashboard</h2>
-        <p class="subtitle">Real-time device status and telemetry</p>
-      </div>
+    <!-- Main View Modes -->
+    <section class="mode-tabs">
+      <button class="mode-tab active" data-view="3-lines" id="tab-3-lines">
+        <div class="mode-icon lines-3">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <span class="tab-label">Тюнер</span>
+      </button>
+      <button class="mode-tab" data-view="gauges" id="tab-gauges">
+        <svg class="mode-icon svg-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        <span class="tab-label">Вакууметры</span>
+      </button>
+    </section>
 
-      <div class="grid">
-        <div class="grid-item">
-          <span class="label">WiFi SSID</span>
-          <span class="value" id="val-ssid">--</span>
-        </div>
-        <div class="grid-item">
-          <span class="label">Portal IP</span>
-          <span class="value" id="val-ip">--</span>
-        </div>
-        <div class="grid-item">
-          <span class="label">Active Clients</span>
-          <span class="value" id="val-clients">--</span>
-        </div>
-        <div class="grid-item">
-          <span class="label">Free Heap</span>
-          <span class="value" id="val-heap">--</span>
-        </div>
-        <div class="grid-item">
-          <span class="label">System Uptime</span>
-          <span class="value" id="val-uptime">--</span>
-        </div>
-        <div class="grid-item">
-          <span class="label">Chipset</span>
-          <span class="value" id="val-chip">--</span>
-        </div>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="footer-info">
-        <div>
-          <span class="label">OS Version</span>
-          <span class="value small" id="val-idf">--</span>
-        </div>
-        <button class="btn-refresh" id="btn-refresh" aria-label="Refresh telemetry data">
-          <svg class="icon-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
-          </svg>
-          Refresh
+    <!-- Sync Mode Section (only applies/shows prominently in 3-lines view) -->
+    <section class="sync-section" id="sync-section">
+      <h2 class="section-title">РЕЖИМ СИНХРОНИЗАЦИИ</h2>
+      <div class="sync-grid">
+        <button class="sync-item" data-channel="left" id="sync-left">
+          <span class="sync-label">Левая пара</span>
+          <span class="sync-detail">1 ↔ 2</span>
+        </button>
+        <button class="sync-item" data-channel="mid" id="sync-mid">
+          <span class="sync-label">Между парами</span>
+          <span class="sync-detail">(1+2) ↔ (3+4)</span>
+        </button>
+        <button class="sync-item" data-channel="right" id="sync-right">
+          <span class="sync-label">Правая пара</span>
+          <span class="sync-detail">3 ↔ 4</span>
         </button>
       </div>
     </section>
+
+    <!-- Visualizer / Oscilloscope Section -->
+    <section class="visualizer-card" id="visualizer-card">
+      <!-- 3 Lines stacked charts -->
+      <div class="charts-stacked" id="charts-stacked-container">
+        <div class="chart-wrapper" id="wrapper-ch1">
+          <canvas id="canvas-ch1"></canvas>
+        </div>
+        <div class="chart-wrapper" id="wrapper-ch3">
+          <canvas id="canvas-ch3"></canvas>
+        </div>
+        <div class="chart-wrapper" id="wrapper-ch2">
+          <canvas id="canvas-ch2"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vacuum Gauges Dials Section -->
+    <section class="gauges-section" id="gauges-section">
+      <h2 class="section-title">ВАКУУМЕТРЫ</h2>
+      <div class="gauges-grid">
+        <!-- Gauge 1 -->
+        <div class="gauge-card" id="gauge-c1">
+          <span class="gauge-num">1</span>
+          <div class="dial-container">
+            <svg class="dial-svg" viewBox="0 0 100 100">
+              <path class="dial-bg" d="M 20 80 A 40 40 0 1 1 80 80" />
+              <path class="dial-fill" id="dial-fill-1" d="M 20 80 A 40 40 0 1 1 80 80" />
+            </svg>
+            <div class="dial-needle" id="needle-1"></div>
+            <div class="dial-value">
+              <span class="dial-num-val" id="dial-val-1">0</span>
+              <span class="dial-unit">kPa</span>
+            </div>
+            <div class="dial-limits">
+              <span>-50</span>
+              <span>+50</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gauge 2 -->
+        <div class="gauge-card" id="gauge-c2">
+          <span class="gauge-num">2</span>
+          <div class="dial-container">
+            <svg class="dial-svg" viewBox="0 0 100 100">
+              <path class="dial-bg" d="M 20 80 A 40 40 0 1 1 80 80" />
+              <path class="dial-fill" id="dial-fill-2" d="M 20 80 A 40 40 0 1 1 80 80" />
+            </svg>
+            <div class="dial-needle" id="needle-2"></div>
+            <div class="dial-value">
+              <span class="dial-num-val" id="dial-val-2">0</span>
+              <span class="dial-unit">kPa</span>
+            </div>
+            <div class="dial-limits">
+              <span>-50</span>
+              <span>+50</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gauge 3 -->
+        <div class="gauge-card" id="gauge-c3">
+          <span class="gauge-num">3</span>
+          <div class="dial-container">
+            <svg class="dial-svg" viewBox="0 0 100 100">
+              <path class="dial-bg" d="M 20 80 A 40 40 0 1 1 80 80" />
+              <path class="dial-fill" id="dial-fill-3" d="M 20 80 A 40 40 0 1 1 80 80" />
+            </svg>
+            <div class="dial-needle" id="needle-3"></div>
+            <div class="dial-value">
+              <span class="dial-num-val" id="dial-val-3">0</span>
+              <span class="dial-unit">kPa</span>
+            </div>
+            <div class="dial-limits">
+              <span>-50</span>
+              <span>+50</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gauge 4 -->
+        <div class="gauge-card" id="gauge-c4">
+          <span class="gauge-num">4</span>
+          <div class="dial-container">
+            <svg class="dial-svg" viewBox="0 0 100 100">
+              <path class="dial-bg" d="M 20 80 A 40 40 0 1 1 80 80" />
+              <path class="dial-fill" id="dial-fill-4" d="M 20 80 A 40 40 0 1 1 80 80" />
+            </svg>
+            <div class="dial-needle" id="needle-4"></div>
+            <div class="dial-value">
+              <span class="dial-num-val" id="dial-val-4">0</span>
+              <span class="dial-unit">kPa</span>
+            </div>
+            <div class="dial-limits">
+              <span>-50</span>
+              <span>+50</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Carburetor / Engine Schematic Section -->
+    <section class="engine-section">
+      <div class="engine-diagram-container">
+        <!-- SVG Vector of Carburetor block -->
+        <svg class="engine-svg" viewBox="0 0 400 140" fill="none" stroke="currentColor">
+          <defs>
+            <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#39ff14" stop-opacity="0.8"/>
+              <stop offset="100%" stop-color="#10b981" stop-opacity="0.2"/>
+            </linearGradient>
+            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+          
+          <!-- Outer engine casing / cylinder head outline -->
+          <path class="manifold-outline" d="M 15,115 L 15,25 Q 15,15 25,15 L 375,15 Q 385,15 385,25 L 385,115 Q 385,125 375,125 L 25,125 Q 15,125 15,115 Z" />
+          
+          <!-- Fin detailing -->
+          <line x1="15" y1="35" x2="385" y2="35" />
+          <line x1="15" y1="50" x2="385" y2="50" />
+          <line x1="15" y1="105" x2="385" y2="105" />
+          
+          <!-- 4 Carburetors/Throttle Bodies -->
+          <!-- Cylinder 1 -->
+          <g class="carb-body" id="carb-body-1">
+            <rect x="50" y="25" width="60" height="70" rx="6" />
+            <line x1="50" y1="60" x2="110" y2="60" />
+            <circle class="sensor-indicator" id="sensor-ring-1" cx="80" cy="60" r="18" />
+            <text class="sensor-lbl" x="80" y="65" text-anchor="middle">1</text>
+          </g>
+          
+          <!-- Cylinder 2 -->
+          <g class="carb-body" id="carb-body-2">
+            <rect x="140" y="25" width="60" height="70" rx="6" />
+            <line x1="140" y1="60" x2="200" y2="60" />
+            <circle class="sensor-indicator" id="sensor-ring-2" cx="170" cy="60" r="18" />
+            <text class="sensor-lbl" x="170" y="65" text-anchor="middle">2</text>
+          </g>
+          
+          <!-- Cylinder 3 -->
+          <g class="carb-body" id="carb-body-3">
+            <rect x="230" y="25" width="60" height="70" rx="6" />
+            <line x1="230" y1="60" x2="290" y2="60" />
+            <circle class="sensor-indicator" id="sensor-ring-3" cx="260" cy="60" r="18" />
+            <text class="sensor-lbl" x="260" y="65" text-anchor="middle">3</text>
+          </g>
+          
+          <!-- Cylinder 4 -->
+          <g class="carb-body" id="carb-body-4">
+            <rect x="320" y="25" width="60" height="70" rx="6" />
+            <line x1="320" y1="60" x2="380" y2="60" />
+            <circle class="sensor-indicator" id="sensor-ring-4" cx="350" cy="60" r="18" />
+            <text class="sensor-lbl" x="350" y="65" text-anchor="middle">4</text>
+          </g>
+          
+          <!-- Interconnection Linkage bar -->
+          <rect x="70" y="82" width="260" height="6" rx="2" class="carb-linkage" />
+        </svg>
+      </div>
+    </section>
+
+
   </main>
+
+  <!-- Calibration Modal Overlay -->
+  <div class="modal-overlay hidden" id="cal-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Калибровка датчиков</h2>
+        <button class="modal-close" id="cal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Калибровка обнуляет текущие показания для компенсации погрешности датчиков. Подключите все каналы к одному источнику вакуума или оставьте на атмосферном давлении, затем нажмите «Сбросить в 0».</p>
+        
+        <div class="cal-values-list">
+          <div class="cal-val-row">
+            <span>Левая пара:</span>
+            <strong id="cal-raw-1">-- kPa</strong>
+            <span class="cal-offset-lbl">(смещение: <span id="cal-offset-1">0.0</span>)</span>
+          </div>
+          <div class="cal-val-row">
+            <span>Правая пара:</span>
+            <strong id="cal-raw-2">-- kPa</strong>
+            <span class="cal-offset-lbl">(смещение: <span id="cal-offset-2">0.0</span>)</span>
+          </div>
+          <div class="cal-val-row">
+            <span>Между парами:</span>
+            <strong id="cal-raw-3">-- kPa</strong>
+            <span class="cal-offset-lbl">(смещение: <span id="cal-offset-3">0.0</span>)</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cal-reset-defaults">Сбросить смещения</button>
+        <button class="btn btn-primary" id="cal-zero-btn">Сбросить в 0</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help Modal Overlay -->
+  <div class="modal-overlay hidden" id="help-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>О программе & Инструкция</h2>
+        <button class="modal-close" id="help-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p><strong>Carb Sync v1.0.0</strong></p>
+        <p>Разработано для ESP32-C3 Carburetor Synchronizer.</p>
+        <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 1rem 0;" />
+        <p><strong>Инструкция по использованию:</strong></p>
+        <ul style="padding-left: 1.2rem; margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; list-style-type: disc;">
+          <li><strong>Тюнер:</strong> Отображает график разности давлений. Добивайтесь, чтобы линия находилась на центральном нулевом уровне.</li>
+          <li><strong>Вакууметры:</strong> Показывают относительное отклонение давлений в пределах от -50 до +50 kPa.</li>
+          <li><strong>Калибровка:</strong> Позволяет обнулить датчики. Нажмите кнопку прицела на панели прибора, когда двигатель выключен, чтобы сбросить показания в 0.</li>
+        </ul>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="help-ok-btn" style="width: 100%;">Понятно</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

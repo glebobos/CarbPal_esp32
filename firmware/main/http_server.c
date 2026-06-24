@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_system.h"
+#include "esp_random.h"
 #include "esp_spiffs.h"
 #include "esp_http_server.h"
 #include "wifi_ap.h"
@@ -145,9 +146,34 @@ static esp_err_t api_info_get_handler(httpd_req_t *req) {
              "ESP32-C3");
              
     httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_sendstr(req, json_response);
     return ESP_OK;
 }
+
+static float s_diff_values[3] = {0.0f, 0.0f, 0.0f};
+
+static esp_err_t api_data_get_handler(httpd_req_t *req) {
+    for (int i = 0; i < 3; i++) {
+        // Generate random fluctuation between -0.4 and +0.4
+        float dev = (((float)(esp_random() % 1000) / 1000.0f) - 0.5f) * 0.8f;
+        s_diff_values[i] += dev;
+        // Keep them bounded in typical ranges (-30 to +30 kPa)
+        if (s_diff_values[i] < -30.0f) s_diff_values[i] = -30.0f;
+        if (s_diff_values[i] > 30.0f) s_diff_values[i] = 30.0f;
+    }
+    
+    char json_response[128];
+    snprintf(json_response, sizeof(json_response),
+             "{\"v1\":%.2f,\"v2\":%.2f,\"v3\":%.2f,\"v4\":0.00}",
+             s_diff_values[0], s_diff_values[1], s_diff_values[2]);
+             
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_sendstr(req, json_response);
+    return ESP_OK;
+}
+
 
 static esp_err_t catch_all_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "Catch-all handler matched: %s", req->uri);
@@ -220,6 +246,13 @@ static const httpd_uri_t api_info_uri = {
     .user_ctx  = NULL
 };
 
+static const httpd_uri_t api_data_uri = {
+    .uri       = "/api/data",
+    .method    = HTTP_GET,
+    .handler   = api_data_get_handler,
+    .user_ctx  = NULL
+};
+
 static const httpd_uri_t generate_204_uri = {
     .uri       = "/generate_204",
     .method    = HTTP_GET,
@@ -282,6 +315,7 @@ httpd_handle_t start_webserver(void) {
         ESP_LOGI(TAG, "Registering HTTP routing table...");
         httpd_register_uri_handler(server, &root_uri);
         httpd_register_uri_handler(server, &api_info_uri);
+        httpd_register_uri_handler(server, &api_data_uri);
         httpd_register_uri_handler(server, &generate_204_uri);
         httpd_register_uri_handler(server, &hotspot_detect_uri);
         httpd_register_uri_handler(server, &ncsi_uri);
