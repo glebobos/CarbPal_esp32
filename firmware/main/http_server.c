@@ -13,6 +13,7 @@
 #include "esp_http_server.h"
 #include "wifi_ap.h"
 #include "http_server.h"
+#include "ads1115.h"
 
 static const char *TAG = "http_server";
 
@@ -142,7 +143,7 @@ static esp_err_t api_info_get_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-static float s_diff_values[3] = {0.0f, 0.0f, 0.0f};
+
 
 
 static void telemetry_websocket_task(void *pvParameters) {
@@ -171,18 +172,14 @@ static void telemetry_websocket_task(void *pvParameters) {
             continue;
         }
         
-        // Generate random fluctuation between -0.4 and +0.4 for mock telemetry
-        for (int i = 0; i < 3; i++) {
-            float dev = (((float)(esp_random() % 1000) / 1000.0f) - 0.5f) * 0.8f;
-            s_diff_values[i] += dev;
-            if (s_diff_values[i] < -30.0f) s_diff_values[i] = -30.0f;
-            if (s_diff_values[i] > 30.0f) s_diff_values[i] = 30.0f;
-        }
+        float v1 = ads1115_get_pressure(0);
+        float v2 = ads1115_get_pressure(1);
+        float v3 = ads1115_get_pressure(2);
         
         char json_response[128];
         snprintf(json_response, sizeof(json_response),
                  "{\"v1\":%.2f,\"v2\":%.2f,\"v3\":%.2f,\"v4\":0.00}",
-                 s_diff_values[0], s_diff_values[1], s_diff_values[2]);
+                 v1, v2, v3);
                  
         // Broadcast
         if (httpd_get_client_list(s_server, &clients, client_fds) == ESP_OK) {
@@ -230,6 +227,10 @@ static esp_err_t ws_handler(httpd_req_t *req) {
             ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
             if (ret == ESP_OK) {
                 ESP_LOGI(TAG, "Received WS packet: %s", (char *)ws_pkt.payload);
+                if (strcmp((char *)ws_pkt.payload, "calibrate") == 0) {
+                    ESP_LOGI(TAG, "Calibration command received over WebSocket");
+                    ads1115_trigger_calibration();
+                }
             }
             free(buf);
         }

@@ -5,6 +5,7 @@
 #include "wifi_ap.h"
 #include "dns_server.h"
 #include "http_server.h"
+#include "ads1115.h"
 
 static const char *TAG = "main";
 
@@ -22,6 +23,9 @@ void app_main(void) {
 
     // 2. Create the default event loop
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    // Initialize I2C and ADS1115 telemetry module
+    ads1115_init();
 
     // 3. Start WiFi in SoftAP mode
     wifi_init_softap();

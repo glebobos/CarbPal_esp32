@@ -13,10 +13,7 @@ let activeSyncTargets = { left: false, right: false, mid: false };
 let isConnected = false;
 let isCalModalOpen = false;
 
-// Calibration Offsets (v_calibrated = v_raw - offset)
-let offsets = [0.0, 0.0, 0.0];
-
-// Raw and Calibrated values
+// Values received from firmware (already calibrated by firmware offsets)
 let rawValues: CarbData = { v1: 0.0, v2: 0.0, v3: 0.0, v4: 0.0 };
 let calValues: CarbData = { v1: 0.0, v2: 0.0, v3: 0.0, v4: 0.0 };
 
@@ -28,15 +25,32 @@ const historyCh1: number[] = Array(BUFFER_SIZE).fill(0); // Diff 1-2
 const historyCh2: number[] = Array(BUFFER_SIZE).fill(0); // Diff 3-4
 const historyCh3: number[] = Array(BUFFER_SIZE).fill(0); // Diff (1+2)/2 - (3+4)/2
 
+// Auto-scaling parameters
+let currentScaleRange = 20.0;
+const MIN_SCALE_RANGE = 5.0; // Don't zoom in beyond 5.0 kPa to prevent noise zoom
+const SCALE_PADDING = 1.15; // 15% headroom above the peak value
+const SCALE_ATTACK = 0.2; // Quick scale expansion when values increase
+const SCALE_DECAY = 0.02; // Slow scale contraction when values return closer to 0
 
+function updateScaleRange() {
+  let maxAbsVal = 0;
+  for (let i = 0; i < BUFFER_SIZE; i++) {
+    const val1 = Math.abs(historyCh1[i]);
+    const val2 = Math.abs(historyCh2[i]);
+    const val3 = Math.abs(historyCh3[i]);
+    if (val1 > maxAbsVal) maxAbsVal = val1;
+    if (val2 > maxAbsVal) maxAbsVal = val2;
+    if (val3 > maxAbsVal) maxAbsVal = val3;
+  }
 
-// Load calibration from localStorage
-const storedOffsets = localStorage.getItem('carb_offsets');
-if (storedOffsets) {
-  try {
-    offsets = JSON.parse(storedOffsets);
-  } catch (e) {
-    console.error('Error loading calibration offsets:', e);
+  const targetRange = Math.max(MIN_SCALE_RANGE, maxAbsVal * SCALE_PADDING);
+
+  if (targetRange > currentScaleRange) {
+    // Fast attack (expansion)
+    currentScaleRange += (targetRange - currentScaleRange) * SCALE_ATTACK;
+  } else {
+    // Slow decay (contraction)
+    currentScaleRange += (targetRange - currentScaleRange) * SCALE_DECAY;
   }
 }
 
@@ -243,15 +257,20 @@ elements.calModal?.addEventListener('click', (e) => {
 });
 
 elements.calZeroBtn?.addEventListener('click', () => {
-  // Capture current raw values as new calibration offsets
-  offsets = [rawValues.v1, rawValues.v2, rawValues.v3];
-  localStorage.setItem('carb_offsets', JSON.stringify(offsets));
+  // Trigger zero-offset calibration on the ESP32 firmware (single source of truth)
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    console.log('Sending remote calibration trigger to ESP32...');
+    ws.send('calibrate');
+  }
   closeModal();
 });
 
 elements.calResetDefaults?.addEventListener('click', () => {
-  offsets = [0.0, 0.0, 0.0];
-  localStorage.setItem('carb_offsets', JSON.stringify(offsets));
+  // Re-run firmware calibration to reset offsets to current atmospheric baseline
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    console.log('Sending calibration reset to ESP32...');
+    ws.send('calibrate');
+  }
   closeModal();
 });
 
@@ -289,9 +308,9 @@ function updateEngineHighlights() {
     return;
   }
 
-  const diffLeft = Math.abs(calValues.v1);
-  const diffRight = Math.abs(calValues.v2);
-  const diffMid = Math.abs(calValues.v3);
+  const diffLeftLocal = Math.abs(calValues.v1);
+  const diffRightLocal = Math.abs(calValues.v2);
+  const diffMidLocal = Math.abs(calValues.v3);
 
   const getStatusClass = (diff: number) => {
     if (diff < 1.0) return 'balanced';
@@ -299,40 +318,36 @@ function updateEngineHighlights() {
     return 'error';
   };
 
-  const statusL = getStatusClass(diffLeft);
-  const statusR = getStatusClass(diffRight);
-  const statusM = getStatusClass(diffMid);
-
   const anySelected = activeSyncTargets.left || activeSyncTargets.right || activeSyncTargets.mid;
 
-  // Left Pair (Cylinders 1 & 2)
   if (!anySelected) {
+    // In full mode (no target selected, including gauges mode), 
+    // left pair highlights reflect the worst-case of local pair diff and middle diff.
+    // right pair highlights reflect the worst-case of local pair diff and middle diff.
+    const statusL = getStatusClass(Math.max(diffLeftLocal, diffMidLocal));
+    const statusR = getStatusClass(Math.max(diffRightLocal, diffMidLocal));
     setIndicatorState(elements.sensorRing1, statusL);
     setIndicatorState(elements.sensorRing2, statusL);
+    setIndicatorState(elements.sensorRing3, statusR);
+    setIndicatorState(elements.sensorRing4, statusR);
   } else if (activeSyncTargets.left) {
+    const statusL = getStatusClass(diffLeftLocal);
     setIndicatorState(elements.sensorRing1, statusL);
     setIndicatorState(elements.sensorRing2, statusL);
-  } else if (activeSyncTargets.mid) {
-    setIndicatorState(elements.sensorRing1, statusM);
-    setIndicatorState(elements.sensorRing2, statusM);
-  } else {
-    setIndicatorState(elements.sensorRing1, 'inactive');
-    setIndicatorState(elements.sensorRing2, 'inactive');
-  }
-
-  // Right Pair (Cylinders 3 & 4)
-  if (!anySelected) {
-    setIndicatorState(elements.sensorRing3, statusR);
-    setIndicatorState(elements.sensorRing4, statusR);
-  } else if (activeSyncTargets.right) {
-    setIndicatorState(elements.sensorRing3, statusR);
-    setIndicatorState(elements.sensorRing4, statusR);
-  } else if (activeSyncTargets.mid) {
-    setIndicatorState(elements.sensorRing3, statusM);
-    setIndicatorState(elements.sensorRing4, statusM);
-  } else {
     setIndicatorState(elements.sensorRing3, 'inactive');
     setIndicatorState(elements.sensorRing4, 'inactive');
+  } else if (activeSyncTargets.right) {
+    const statusR = getStatusClass(diffRightLocal);
+    setIndicatorState(elements.sensorRing1, 'inactive');
+    setIndicatorState(elements.sensorRing2, 'inactive');
+    setIndicatorState(elements.sensorRing3, statusR);
+    setIndicatorState(elements.sensorRing4, statusR);
+  } else if (activeSyncTargets.mid) {
+    const statusM = getStatusClass(diffMidLocal);
+    setIndicatorState(elements.sensorRing1, statusM);
+    setIndicatorState(elements.sensorRing2, statusM);
+    setIndicatorState(elements.sensorRing3, statusM);
+    setIndicatorState(elements.sensorRing4, statusM);
   }
 }
 
@@ -407,11 +422,11 @@ function handleDisconnect() {
 // Calculate differences and update history buffers
 function updateHistoryAndTelemetry() {
   if (isConnected) {
-    // Compute calibrated values
+    // Values from firmware are already calibrated (offsets applied in firmware)
     calValues = {
-      v1: rawValues.v1 - offsets[0],
-      v2: rawValues.v2 - offsets[1],
-      v3: rawValues.v3 - offsets[2],
+      v1: rawValues.v1,
+      v2: rawValues.v2,
+      v3: rawValues.v3,
       v4: 0,
     };
   } else {
@@ -470,9 +485,10 @@ function updateHistoryAndTelemetry() {
     if (elements.calRaw2) elements.calRaw2.textContent = `${rawValues.v2.toFixed(2)} kPa`;
     if (elements.calRaw3) elements.calRaw3.textContent = `${rawValues.v3.toFixed(2)} kPa`;
     
-    if (elements.calOffset1) elements.calOffset1.textContent = offsets[0].toFixed(2);
-    if (elements.calOffset2) elements.calOffset2.textContent = offsets[1].toFixed(2);
-    if (elements.calOffset3) elements.calOffset3.textContent = offsets[2].toFixed(2);
+    // Offsets are managed by firmware; show "FW" to indicate firmware-managed
+    if (elements.calOffset1) elements.calOffset1.textContent = 'FW';
+    if (elements.calOffset2) elements.calOffset2.textContent = 'FW';
+    if (elements.calOffset3) elements.calOffset3.textContent = 'FW';
   }
 
   updateEngineHighlights();
@@ -483,7 +499,6 @@ function drawWaveform(
   ctx: CanvasRenderingContext2D | null, 
   canvas: HTMLCanvasElement | null, 
   history: number[], 
-  title: string, 
   yRange: number, 
   color = '#39ff14'
 ) {
@@ -551,11 +566,6 @@ function drawWaveform(
   }
   ctx.stroke();
   ctx.shadowBlur = 0; // reset shadow
-  
-  // Draw title in corner
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-  ctx.font = '500 9px Inter, sans-serif';
-  ctx.fillText(title, 8, 16);
 }
 
 
@@ -563,9 +573,10 @@ function drawWaveform(
 // 60FPS Render Loop
 function renderLoop() {
   if (currentView === '3-lines' && dirty) {
-    drawWaveform(ctxCh1, elements.canvasCh1, historyCh1, '', 20, '#39ff14');
-    drawWaveform(ctxCh2, elements.canvasCh2, historyCh2, '', 20, '#39ff14');
-    drawWaveform(ctxCh3, elements.canvasCh3, historyCh3, '', 20, '#39ff14');
+    updateScaleRange();
+    drawWaveform(ctxCh1, elements.canvasCh1, historyCh1, currentScaleRange, '#39ff14');
+    drawWaveform(ctxCh3, elements.canvasCh3, historyCh3, currentScaleRange, '#39ff14');
+    drawWaveform(ctxCh2, elements.canvasCh2, historyCh2, currentScaleRange, '#39ff14');
     dirty = false;
   }
 

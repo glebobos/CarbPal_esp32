@@ -32,13 +32,17 @@ body {
     radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 50%),
     radial-gradient(circle at 0% 100%, rgba(99, 102, 241, 0.05) 0%, transparent 40%);
   color: var(--text-primary);
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  width: 100vw;
+  width: 100dvw;
+  margin: 0;
+  padding: 0.5rem;
+  overflow: hidden;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  padding: 1rem;
-  overflow-y: auto;
-  overflow-x: hidden;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 /* Glass Background Layer */
@@ -54,12 +58,14 @@ body {
 
 .container {
   width: 100%;
-  max-width: 480px;
+  height: 100%;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.5rem;
   animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  padding-bottom: 2rem;
+  box-sizing: border-box;
+  padding: 0;
 }
 
 /* Header styling */
@@ -311,18 +317,25 @@ body {
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .charts-stacked {
   display: flex;
   flex-direction: row;
   gap: 0.5rem;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
 .chart-wrapper {
   position: relative;
   flex: 1;
-  height: 200px;
+  height: 100%;
   background: rgba(0, 0, 0, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.03);
   border-radius: 0.5rem;
@@ -368,8 +381,6 @@ body {
   align-self: flex-start;
 }
 
-
-
 /* Vacuum Gauges Dials Section */
 .gauges-section {
   display: flex;
@@ -392,13 +403,13 @@ body {
   flex-direction: column;
   align-items: center;
   position: relative;
+  gap: 0.25rem;
 }
 
 .gauge-num {
   font-size: 0.65rem;
   font-weight: 700;
   color: var(--neon-green);
-  opacity: 0.9;
   margin-bottom: 2px;
 }
 
@@ -499,21 +510,35 @@ body {
 /* Engine Section */
 .engine-section {
   width: 100%;
-}
-
-.engine-diagram-container {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 1rem;
-  padding: 0.75rem;
+  flex-shrink: 1;
+  min-height: 0;
+  max-height: 140px;
   display: flex;
   justify-content: center;
   align-items: center;
+  margin-top: auto;
+}
+
+.engine-diagram-container {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  padding: 0.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
 }
 
 .engine-svg {
-  width: 100%;
-  height: auto;
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  max-height: 110px;
   color: var(--text-secondary);
 }
 
@@ -822,5 +847,56 @@ body {
   }
   .dial-num-val {
     font-size: 0.85rem;
+  }
+}
+
+/* Landscape View optimization */
+@media (orientation: landscape) {
+  .container {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    grid-template-rows: auto auto auto 1fr;
+    grid-template-areas:
+      "header main-view"
+      "tabs main-view"
+      "sync main-view"
+      "engine main-view";
+    height: 100%;
+    width: 100%;
+    gap: 0.4rem;
+  }
+
+  .header {
+    grid-area: header;
+    margin: 0;
+    padding: 0;
+  }
+
+  .mode-tabs {
+    grid-area: tabs;
+    margin: 0;
+  }
+
+  .sync-section {
+    grid-area: sync;
+    margin: 0;
+  }
+
+  .visualizer-card {
+    grid-area: main-view;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .gauges-section {
+    grid-area: main-view;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .engine-section {
+    grid-area: engine;
+    margin: 0;
+    align-self: end;
   }
 }

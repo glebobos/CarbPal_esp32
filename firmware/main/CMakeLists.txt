@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "main.c" "wifi_ap.c" "http_server.c"
+    SRCS "main.c" "wifi_ap.c" "http_server.c" "ads1115.c"
     INCLUDE_DIRS "."
-    REQUIRES nvs_flash esp_wifi esp_netif esp_http_server spiffs dns_server esp_timer
+    REQUIRES nvs_flash esp_wifi esp_netif esp_http_server spiffs dns_server esp_timer driver
 )
